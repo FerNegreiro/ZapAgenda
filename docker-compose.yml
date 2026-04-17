@@ -1,0 +1,76 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: zapagenda_db
+    environment:
+      POSTGRES_USER: zap_user
+      POSTGRES_PASSWORD: zap_password
+      POSTGRES_DB: zapagenda
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - zap_net
+
+  api:
+    build: ./backend
+    container_name: zapagenda_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/code
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    networks:
+      - zap_net
+
+  frontend:
+    build: ./frontend
+    container_name: zapagenda_frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - zap_net
+    depends_on:
+      - api
+
+  redis:
+    image: redis:alpine
+    container_name: zapagenda_redis
+    ports:
+      - "6379:6379"
+    restart: always
+    networks:
+      - zap_net
+
+  evolution-api:
+    image: atendai/evolution-api:v1.8.2
+    container_name: zapagenda_evolution
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=http://localhost:8080
+      - AUTHENTICATION_API_KEY=ZapAgendaSuperSecretKey # Sua senha mestre
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://zap_user:zap_password@db:5432/zapagenda
+    depends_on:
+      - redis
+      - db
+    restart: always
+    networks:
+      - zap_net
+
+networks:
+  zap_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
